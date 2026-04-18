@@ -78,11 +78,10 @@ async def entrypoint(ctx: JobContext):
 
     logger.info(f"Tour starting for: {metadata.get('address', 'unknown address')}")
 
-    # FIX: llm goes in AgentSession constructor, NOT in session.start()
     session = AgentSession(
         vad=silero.VAD.load(),
         llm=google.beta.realtime.RealtimeModel(
-            model="gemini-2.0-flash-live-001",
+            model="gemini-2.0-flash-exp",
             voice="Puck",
             temperature=0.7,
             instructions=build_system_prompt(metadata),
