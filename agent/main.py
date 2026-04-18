@@ -1,6 +1,9 @@
 """
-Property Tour AI Agent — LiveKit + Gemini Live
-No external data dependencies — uses listing data passed via room metadata.
+Property Tour AI Agent — LiveKit + Gemini Live (Optimized)
+- Uses gemini-2.0-flash-live-001 via google.beta.realtime (fastest available)
+- Prewarms VAD before job arrives to cut connection latency
+- Uses current RoomOptions API (no deprecation warnings)
+- Calls generate_reply() immediately so agent speaks first
 
 Environment variables (set in Railway dashboard):
   LIVEKIT_URL         wss://your-app.livekit.cloud
@@ -14,7 +17,15 @@ import logging
 import os
 
 from dotenv import load_dotenv
-from livekit.agents import Agent, AgentSession, JobContext, RoomInputOptions, WorkerOptions, cli
+from livekit.agents import (
+    Agent,
+    AgentSession,
+    JobContext,
+    JobProcess,
+    WorkerOptions,
+    cli,
+    room_io,
+)
 from livekit.plugins import google, silero
 
 load_dotenv()
@@ -23,6 +34,15 @@ os.environ.setdefault("LIVEKIT_API_KEY", "APIGNNqKxoa8TCd")
 os.environ.setdefault("LIVEKIT_API_SECRET", "6Ly652vPoJJfeAniXAqnhP0QWWvhsNofqVPadPw67BCB")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def prewarm(proc: JobProcess):
+    """
+    Runs once per worker process before any jobs arrive.
+    Loading VAD here means it's ready instantly when a tour starts
+    instead of loading on first connection (saves ~1-2 seconds).
+    """
+    proc.userdata["vad"] = silero.VAD.load()
 
 
 def build_system_prompt(metadata: dict) -> str:
@@ -76,27 +96,32 @@ async def entrypoint(ctx: JobContext):
     except json.JSONDecodeError:
         logger.warning("Could not parse room metadata")
 
-    logger.info(f"Tour starting for: {metadata.get('address', 'unknown address')}")
+    address = metadata.get("address", "unknown address")
+    logger.info(f"Tour starting for: {address}")
+
+    prompt = build_system_prompt(metadata)
 
     session = AgentSession(
-        vad=silero.VAD.load(),
-        llm=google.realtime.RealtimeModel(
-            model="gemini-2.5-flash-native-audio-preview-12-2025",
+        # Use prewarmed VAD — already loaded, no startup delay
+        vad=ctx.proc.userdata["vad"],
+        llm=google.beta.realtime.RealtimeModel(
+            model="gemini-2.0-flash-live-001",
             voice="Puck",
             temperature=0.7,
-            instructions=build_system_prompt(metadata),
+            instructions=prompt,
         ),
     )
 
     await session.start(
-        agent=Agent(
-            instructions=build_system_prompt(metadata),
-        ),
+        agent=Agent(instructions=prompt),
         room=ctx.room,
-        room_input_options=RoomInputOptions(
-            video_enabled=True,
+        room_options=room_io.RoomOptions(
+            video_input=True,   # Agent sees buyer's camera
         ),
     )
+
+    # Trigger the agent to speak immediately instead of waiting for buyer input
+    await session.generate_reply()
 
     logger.info("Agent session started successfully")
 
@@ -105,6 +130,7 @@ if __name__ == "__main__":
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
+            prewarm_fnc=prewarm,      # VAD loads before job arrives
             agent_name="property-tour-agent",
         )
     )
