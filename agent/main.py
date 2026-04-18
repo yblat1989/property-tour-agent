@@ -1,9 +1,5 @@
 """
-Property Tour AI Agent — LiveKit + Gemini Live (Optimized)
-- Uses gemini-2.0-flash-live-001 via google.beta.realtime (fastest available)
-- Prewarms VAD before job arrives to cut connection latency
-- Uses current RoomOptions API (no deprecation warnings)
-- Calls generate_reply() immediately so agent speaks first
+Property Tour AI Agent — LiveKit + Gemini Live (Stable)
 
 Environment variables (set in Railway dashboard):
   LIVEKIT_URL         wss://your-app.livekit.cloud
@@ -37,11 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 def prewarm(proc: JobProcess):
-    """
-    Runs once per worker process before any jobs arrive.
-    Loading VAD here means it's ready instantly when a tour starts
-    instead of loading on first connection (saves ~1-2 seconds).
-    """
+    """Load VAD once per process before jobs arrive — cuts startup latency."""
     proc.userdata["vad"] = silero.VAD.load()
 
 
@@ -96,16 +88,14 @@ async def entrypoint(ctx: JobContext):
     except json.JSONDecodeError:
         logger.warning("Could not parse room metadata")
 
-    address = metadata.get("address", "unknown address")
-    logger.info(f"Tour starting for: {address}")
+    logger.info(f"Tour starting for: {metadata.get('address', 'unknown address')}")
 
     prompt = build_system_prompt(metadata)
 
     session = AgentSession(
-        # Use prewarmed VAD — already loaded, no startup delay
         vad=ctx.proc.userdata["vad"],
-        llm=google.beta.realtime.RealtimeModel(
-            model="gemini-2.0-flash-live-001",
+        llm=google.realtime.RealtimeModel(
+            model="gemini-2.5-flash-native-audio-preview-12-2025",
             voice="Puck",
             temperature=0.7,
             instructions=prompt,
@@ -116,12 +106,9 @@ async def entrypoint(ctx: JobContext):
         agent=Agent(instructions=prompt),
         room=ctx.room,
         room_options=room_io.RoomOptions(
-            video_input=True,   # Agent sees buyer's camera
+            video_input=True,
         ),
     )
-
-    # Trigger the agent to speak immediately instead of waiting for buyer input
-    await session.generate_reply()
 
     logger.info("Agent session started successfully")
 
@@ -130,7 +117,7 @@ if __name__ == "__main__":
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
-            prewarm_fnc=prewarm,      # VAD loads before job arrives
+            prewarm_fnc=prewarm,
             agent_name="property-tour-agent",
         )
     )
