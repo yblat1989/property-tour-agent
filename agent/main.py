@@ -1,5 +1,5 @@
 """
-Property Tour AI Agent — LiveKit + Gemini 2.0 Flash Live
+Property Tour AI Agent — LiveKit + Gemini Live
 No external data dependencies — uses listing data passed via room metadata.
 
 Environment variables (set in Railway dashboard):
@@ -80,8 +80,8 @@ async def entrypoint(ctx: JobContext):
 
     session = AgentSession(
         vad=silero.VAD.load(),
-        llm=google.beta.realtime.RealtimeModel(
-            model="gemini-2.0-flash-exp",
+        llm=google.realtime.RealtimeModel(
+            model="gemini-2.5-flash-native-audio-preview-12-2025",
             voice="Puck",
             temperature=0.7,
             instructions=build_system_prompt(metadata),
