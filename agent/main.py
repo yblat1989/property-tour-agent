@@ -26,15 +26,15 @@ logger = logging.getLogger(__name__)
 
 
 def build_system_prompt(metadata: dict) -> str:
-    address   = metadata.get("address", "this property")
-    price     = metadata.get("price")
-    beds      = metadata.get("beds")
-    baths     = metadata.get("baths")
-    sqft      = metadata.get("sqft")
-    year      = metadata.get("yearBuilt")
-    mls       = metadata.get("mlsNumber", "N/A")
-    desc      = metadata.get("description", "")
-    features  = metadata.get("features", [])
+    address  = metadata.get("address", "this property")
+    price    = metadata.get("price")
+    beds     = metadata.get("beds")
+    baths    = metadata.get("baths")
+    sqft     = metadata.get("sqft")
+    year     = metadata.get("yearBuilt")
+    mls      = metadata.get("mlsNumber", "N/A")
+    desc     = metadata.get("description", "")
+    features = metadata.get("features", [])
 
     return f"""You are an expert AI real estate tour guide. A buyer is self-touring this property RIGHT NOW using their phone camera and microphone. You can see what they see and hear what they say.
 
@@ -70,7 +70,6 @@ Start with a single friendly sentence welcoming the buyer and letting them know 
 async def entrypoint(ctx: JobContext):
     await ctx.connect()
 
-    # Property data comes from room metadata set by the token edge function
     metadata = {}
     try:
         metadata = json.loads(ctx.room.metadata or "{}")
@@ -79,8 +78,15 @@ async def entrypoint(ctx: JobContext):
 
     logger.info(f"Tour starting for: {metadata.get('address', 'unknown address')}")
 
+    # FIX: llm goes in AgentSession constructor, NOT in session.start()
     session = AgentSession(
         vad=silero.VAD.load(),
+        llm=google.beta.realtime.RealtimeModel(
+            model="gemini-2.0-flash-live-001",
+            voice="Puck",
+            temperature=0.7,
+            instructions=build_system_prompt(metadata),
+        ),
     )
 
     await session.start(
@@ -89,13 +95,7 @@ async def entrypoint(ctx: JobContext):
         ),
         room=ctx.room,
         room_input_options=RoomInputOptions(
-            video_enabled=True,  # Agent sees buyer's camera feed
-        ),
-        llm=google.beta.realtime.RealtimeModel(
-            model="gemini-2.0-flash-live-001",
-            voice="Puck",
-            temperature=0.7,
-            instructions=build_system_prompt(metadata),
+            video_enabled=True,
         ),
     )
 
