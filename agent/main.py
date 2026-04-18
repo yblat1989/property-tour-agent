@@ -18,6 +18,9 @@ from livekit.agents import Agent, AgentSession, JobContext, RoomInputOptions, Wo
 from livekit.plugins import google, silero
 
 load_dotenv()
+os.environ.setdefault("LIVEKIT_URL", "wss://realaitour-8egrtmu5.livekit.cloud")
+os.environ.setdefault("LIVEKIT_API_KEY", "APIGNNqKxoa8TCd")
+os.environ.setdefault("LIVEKIT_API_SECRET", "6Ly652vPoJJfeAniXAqnhP0QWWvhsNofqVPadPw67BCB")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
